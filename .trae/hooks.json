@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash ./.trae/scripts/setup_env.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
