@@ -107,6 +107,7 @@
       border-radius: 14px;
       background: #0e1712;
       touch-action: none;
+      outline: none;
     }
 
     .overlay {
@@ -121,7 +122,10 @@
       padding: 24px;
     }
 
-    .overlay.hidden { display: none; }
+    .overlay.hidden {
+      display: none;
+      pointer-events: none;
+    }
 
     .overlay h2 {
       font-size: 32px;
@@ -191,11 +195,11 @@
     </header>
 
     <div class="board-wrap">
-      <canvas id="board" width="480" height="480" aria-label="贪吃蛇游戏画布"></canvas>
+      <canvas id="board" width="480" height="480" tabindex="0" aria-label="贪吃蛇游戏画布"></canvas>
       <div id="overlay" class="overlay">
         <div>
           <h2 id="overlayTitle">准备好了吗</h2>
-          <p id="overlayText">用方向键或 WASD 控制，空格暂停。</p>
+          <p id="overlayText">开始后按方向键或 WASD 移动，空格暂停。</p>
           <button id="actionBtn" type="button">开始游戏</button>
         </div>
       </div>
@@ -211,8 +215,8 @@
   <script>
     const COLS = 20;
     const ROWS = 20;
-    const START_MS = 130;
-    const MIN_MS = 70;
+    const START_MS = 160;
+    const MIN_MS = 80;
     const STORAGE_KEY = "snakeBestScore";
 
     const canvas = document.getElementById("board");
@@ -224,24 +228,34 @@
     const overlayText = document.getElementById("overlayText");
     const actionBtn = document.getElementById("actionBtn");
 
+    if (typeof ctx.roundRect !== "function") {
+      ctx.roundRect = function (x, y, w, h) {
+        this.rect(x, y, w, h);
+      };
+    }
+
     const cell = canvas.width / COLS;
-    let snake, dir, queued, food, score, best, running, paused, lastTick, stepMs;
+    let snake, dir, queued, food, score, best;
+    let running, paused, moving, lastTick, stepMs, gameId, paintId;
 
     best = Number(localStorage.getItem(STORAGE_KEY) || 0);
     bestEl.textContent = String(best);
+    gameId = 0;
+    paintId = 0;
 
     function resetGame() {
-      const mid = Math.floor(COLS / 2);
+      const row = Math.floor(ROWS / 2);
       snake = [
-        { x: mid - 1, y: mid },
-        { x: mid - 2, y: mid },
-        { x: mid - 3, y: mid }
+        { x: 4, y: row },
+        { x: 3, y: row },
+        { x: 2, y: row }
       ];
       dir = { x: 1, y: 0 };
       queued = [];
       score = 0;
       stepMs = START_MS;
       lastTick = 0;
+      moving = false;
       food = spawnFood();
       scoreEl.textContent = "0";
     }
@@ -261,9 +275,13 @@
     function queueDir(nx, ny) {
       const last = queued.length ? queued[queued.length - 1] : dir;
       if (last.x === nx && last.y === ny) return;
-      if (last.x + nx === 0 && last.y + ny === 0) return;
+      if (moving && last.x + nx === 0 && last.y + ny === 0) return;
       if (queued.length >= 2) return;
       queued.push({ x: nx, y: ny });
+      if (running && !paused) {
+        moving = true;
+        if (!lastTick) lastTick = Date.now();
+      }
     }
 
     function tick() {
@@ -316,7 +334,7 @@
         ctx.stroke();
       }
 
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
       const foodPad = 5 - pulse;
       ctx.shadowColor = "#ff8a7a";
       ctx.shadowBlur = 12 + pulse * 8;
@@ -356,14 +374,23 @@
       ctx.fill();
     }
 
-    function loop(now) {
-      if (!running) return;
-      if (!paused && now - lastTick >= stepMs) {
-        lastTick = now;
-        tick();
+    function loop(id) {
+      if (!running || id !== gameId) return;
+      if (!paused && moving) {
+        const now = Date.now();
+        if (!lastTick) lastTick = now;
+        if (now - lastTick >= stepMs) {
+          lastTick = now;
+          tick();
+        }
       }
       draw();
-      requestAnimationFrame(loop);
+      paintId = requestAnimationFrame(() => loop(id));
+    }
+
+    function focusBoard() {
+      actionBtn.blur();
+      canvas.focus({ preventScroll: true });
     }
 
     function showOverlay(title, text, buttonLabel) {
@@ -378,12 +405,14 @@
     }
 
     function startGame() {
+      gameId += 1;
+      if (paintId) cancelAnimationFrame(paintId);
       resetGame();
       running = true;
       paused = false;
       hideOverlay();
-      lastTick = performance.now();
-      requestAnimationFrame(loop);
+      focusBoard();
+      paintId = requestAnimationFrame(() => loop(gameId));
     }
 
     function pauseGame() {
@@ -395,13 +424,18 @@
     function resumeGame() {
       if (!running || !paused) return;
       paused = false;
+      lastTick = Date.now();
       hideOverlay();
-      lastTick = performance.now();
+      focusBoard();
     }
 
     function endGame() {
       running = false;
       paused = false;
+      moving = false;
+      if (paintId) cancelAnimationFrame(paintId);
+      paintId = 0;
+      draw();
       showOverlay("游戏结束", "本局分数 " + score + " 分。再来一局？", "再来一局");
     }
 
@@ -442,9 +476,11 @@
       else queueDir(0, dy > 0 ? 1 : -1);
     });
 
-    actionBtn.addEventListener("click", () => {
-      if (!running || !paused) startGame();
-      else resumeGame();
+    actionBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (paused && running) resumeGame();
+      else startGame();
     });
 
     resetGame();
