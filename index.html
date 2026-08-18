@@ -154,6 +154,21 @@
     button:hover { filter: brightness(1.05); }
     button:active { transform: translateY(1px); }
 
+    button.ghost {
+      color: var(--text);
+      background: color-mix(in srgb, var(--panel) 88%, black);
+      border: 1px solid var(--panel-border);
+      box-shadow: none;
+      padding: 10px 16px;
+    }
+
+    button.ghost:disabled {
+      opacity: 0.45;
+      cursor: default;
+      transform: none;
+      filter: none;
+    }
+
     .hint {
       color: var(--muted);
       font-size: 13px;
@@ -191,6 +206,7 @@
           <span>最高</span>
           <strong id="best">0</strong>
         </div>
+        <button id="pauseBtn" class="ghost" type="button" disabled>暂停</button>
       </div>
     </header>
 
@@ -200,14 +216,14 @@
         <div>
           <h2 id="overlayTitle">准备好了吗</h2>
           <p id="overlayText">开始后按方向键或 WASD 移动，空格暂停。</p>
-          <button id="actionBtn" type="button">开始游戏</button>
+          <button id="actionBtn" type="button" tabindex="-1">开始游戏</button>
         </div>
       </div>
     </div>
 
     <p class="hint">
       键盘：<kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>
-      · <kbd>空格</kbd> 暂停<br />
+      · <kbd>空格</kbd> 或右上角「暂停」<br />
       手机：在棋盘上滑动转向
     </p>
   </div>
@@ -226,6 +242,7 @@
     const overlay = document.getElementById("overlay");
     const overlayTitle = document.getElementById("overlayTitle");
     const overlayText = document.getElementById("overlayText");
+    const pauseBtn = document.getElementById("pauseBtn");
     const actionBtn = document.getElementById("actionBtn");
 
     if (typeof ctx.roundRect !== "function") {
@@ -372,6 +389,14 @@
       ctx.arc(cx + ox + px, cy + oy + py, 2.2, 0, Math.PI * 2);
       ctx.arc(cx + ox - px, cy + oy - py, 2.2, 0, Math.PI * 2);
       ctx.fill();
+
+      if (running && !moving && !paused) {
+        ctx.fillStyle = "rgba(232, 240, 234, 0.88)";
+        ctx.font = "16px Segoe UI, PingFang SC, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("按方向键开始移动", canvas.width / 2, canvas.height - 26);
+      }
     }
 
     function loop(id) {
@@ -404,6 +429,10 @@
       overlay.classList.add("hidden");
     }
 
+    function setPauseEnabled(on) {
+      pauseBtn.disabled = !on;
+    }
+
     function startGame() {
       gameId += 1;
       if (paintId) cancelAnimationFrame(paintId);
@@ -411,6 +440,7 @@
       running = true;
       paused = false;
       hideOverlay();
+      setPauseEnabled(true);
       focusBoard();
       paintId = requestAnimationFrame(() => loop(gameId));
     }
@@ -418,6 +448,7 @@
     function pauseGame() {
       if (!running || paused) return;
       paused = true;
+      setPauseEnabled(false);
       showOverlay("已暂停", "按空格或点击继续。", "继续游戏");
     }
 
@@ -426,6 +457,7 @@
       paused = false;
       lastTick = Date.now();
       hideOverlay();
+      setPauseEnabled(true);
       focusBoard();
     }
 
@@ -433,6 +465,7 @@
       running = false;
       paused = false;
       moving = false;
+      setPauseEnabled(false);
       if (paintId) cancelAnimationFrame(paintId);
       paintId = 0;
       draw();
@@ -446,8 +479,10 @@
     };
 
     window.addEventListener("keydown", (event) => {
-      if (event.code === "Space") {
+      const isSpace = event.code === "Space" || event.key === " ";
+      if (isSpace) {
         event.preventDefault();
+        event.stopPropagation();
         if (!running) startGame();
         else if (paused) resumeGame();
         else pauseGame();
@@ -458,6 +493,11 @@
       event.preventDefault();
       if (!running) startGame();
       queueDir(next[0], next[1]);
+    }, true);
+
+    pauseBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      pauseGame();
     });
 
     let swipe = null;
