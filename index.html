@@ -231,8 +231,8 @@
   <script>
     const COLS = 20;
     const ROWS = 20;
-    const START_MS = 160;
-    const MIN_MS = 80;
+    const START_MS = 280;
+    const MIN_MS = 160;
     const STORAGE_KEY = "snakeBestScore";
 
     const canvas = document.getElementById("board");
@@ -319,7 +319,7 @@
           bestEl.textContent = String(best);
           localStorage.setItem(STORAGE_KEY, String(best));
         }
-        stepMs = Math.max(MIN_MS, START_MS - score * 4);
+        stepMs = Math.max(MIN_MS, START_MS - score * 2);
         food = spawnFood();
       } else {
         snake.pop();
